@@ -326,7 +326,7 @@ print("Dataset created....")
 #     if count == 20:
 #         break
 
-# raise SystemExit(0)
+# 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -467,12 +467,14 @@ train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size,
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE,num_workers = 0,shuffle = True,drop_last=True)
 val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers = 0,shuffle = False,drop_last=True)
 
-# Print image and target size and show image
-# rgb_batch, target = iter(train_loader).next()
-# plt.figure(figsize=(10, 12))
-# print("RGB image size: ", rgb_batch.shape)
-# print ("Target size: ", target.shape)
-# plt.imshow(rgb_batch[0])
+#Print image and target size and show image
+rgb_batch, target = iter(train_loader).next()
+plt.figure(figsize=(10, 12))
+print("RGB image size: ", rgb_batch.shape)
+print ("Target size: ", target.shape)
+plt.imshow(rgb_batch[0])
+plt.savefig('test.png')
+raise SystemExit(0)
 
 model = CNN(25, N_CLASSES)
 model.to(device)
