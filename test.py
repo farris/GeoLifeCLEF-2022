@@ -254,6 +254,7 @@ class GeoLifeCLEF2022Dataset(Dataset):
 
         if use_rasters:
             if patch_extractor is None:
+                
                 #from .environmental_raster import PatchExtractor
 
                 patch_extractor = PatchExtractor(self.root / "rasters", size=256)
