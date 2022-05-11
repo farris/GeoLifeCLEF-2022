@@ -34,19 +34,6 @@ from torchvision.models.resnet import ResNet, BasicBlock
 from tqdm import tqdm
 torch.backends.cudnn.enabled = False
 
-
-DATA_PATH = Path("/scratch/fda239/Kaggle/data")
-
-df_obs_fr_train = pd.read_csv(DATA_PATH / "observations" / "observations_fr_train.csv", sep=";", index_col="observation_id")
-
-
-df_obs_train = df_obs_fr_train
-
-obs_id_train = df_obs_train.index.values
-
-
-
-
 def get_train_transforms():
     return Compose([
             #RandomResizedCrop(256, 256),
@@ -158,9 +145,6 @@ def load_patch(
     
     return patches
     
-
-#https://github.com/maximiliense/GLC/blob/master/data_loading/pytorch_dataset.py
-
 class GeoLifeCLEF2022Dataset(Dataset):
     """Pytorch dataset handler for GeoLifeCLEF 2022 dataset.
     Parameters
@@ -254,9 +238,7 @@ class GeoLifeCLEF2022Dataset(Dataset):
 
         if use_rasters:
             if patch_extractor is None:
-                
-                #from .environmental_raster import PatchExtractor
-
+        
                 patch_extractor = PatchExtractor(self.root / "rasters", size=256)
                 patch_extractor.add_all_rasters()
 
@@ -272,7 +254,7 @@ class GeoLifeCLEF2022Dataset(Dataset):
         latitude = self.coordinates[index][0]
         longitude = self.coordinates[index][1]
         observation_id = self.observation_ids[index]
-        # try:
+
         observation_id = str(observation_id)
 
         subfolder1 = observation_id[-2:]
@@ -280,35 +262,34 @@ class GeoLifeCLEF2022Dataset(Dataset):
 
         filename = Path(self.root) / "patches-fr" / subfolder1 / subfolder2 / observation_id
         rgb_filename = filename.with_name(filename.stem + "_rgb.jpg")
-        if os.path.exists(rgb_filename):
-            patches = load_patch(
-                observation_id, self.root, data=self.patch_data
-            )
-            patches = torch.tensor(patches)
-          
-            if patches is not None:
-                # Concatenate all patches into a single tensor
-                if len(patches) == 1:
-                    patches = patches[0]
+        # if os.path.exists(rgb_filename):
+        patches = load_patch(
+            observation_id, self.root, data=self.patch_data
+        )
+        patches = torch.tensor(patches)
+        
+        if patches is not None:
+            
+            if len(patches) == 1:
+                patches = patches[0]
 
-                if self.transform:
-                    patches = self.transform(patches)
-                    #patches = self.transform(image=patches)["image"]
-                    #print (patches.shape)
+            if self.transform:
+                patches = self.transform(patches)
+              
 
-                if self.training_data:
-                    target = self.targets[index]
+            if self.training_data:
+                target = self.targets[index]
 
-                    if self.target_transform:
-                        target = self.target_transform(target)
+                if self.target_transform:
+                    target = self.target_transform(target)
 
-                    return patches, target
-                else:
-                    return patches
+                return patches, target
             else:
                 return patches
         else:
-            pass
+            return patches
+        # else:
+        #     pass
 
 
 # def collate_fn(batch):
@@ -316,7 +297,7 @@ class GeoLifeCLEF2022Dataset(Dataset):
 #     batch = list(filter(lambda x: x is not None, batch))
 #     return torch.utils.data.dataloader.default_collate(batch)
 
-
+DATA_PATH = Path("/scratch/fda239/Kaggle/data")
 # possible values: 'all', 'rgb', 'near_ir', 'landcover' or 'altitude'
 dataset = GeoLifeCLEF2022Dataset(DATA_PATH,subset = "train", 
                                  region = 'fr', 
@@ -328,24 +309,24 @@ dataset = GeoLifeCLEF2022Dataset(DATA_PATH,subset = "train",
 print("Dataset created....")
 
 
-train_loader = DataLoader(dataset, batch_size=2,num_workers = 0,shuffle = False,drop_last=True,collate_fn=lambda x: x )
-train_loader = DataLoader(dataset, batch_size=2,num_workers = 0,shuffle = False,drop_last=True)
+# train_loader = DataLoader(dataset, batch_size=2,num_workers = 0,shuffle = False,drop_last=True,collate_fn=lambda x: x )
+# train_loader = DataLoader(dataset, batch_size=2,num_workers = 0,shuffle = False,drop_last=True)
 
 
 
-print("Len train_loader:", len(train_loader))
-count = 0
-for batch in train_loader:
-    # print("Batch size:", len(batch))
-    print('-----------------------------------')
-    count += 1
-    # print("count:", count)
-    print(batch)
-    print('-----------------------------------')
-    if count == 20:
-        break
+# print("Len train_loader:", len(train_loader))
+# count = 0
+# for batch in train_loader:
+#     # print("Batch size:", len(batch))
+#     print('-----------------------------------')
+#     count += 1
+#     # print("count:", count)
+#     print(batch)
+#     print('-----------------------------------')
+#     if count == 20:
+#         break
 
-raise SystemExit(0)
+# raise SystemExit(0)
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -472,6 +453,7 @@ def step(loss, optimizer):
   loss.backward()
 
   optimizer.step()
+
 
 #Set of target species in filtered csv
 N_CLASSES = 4426
