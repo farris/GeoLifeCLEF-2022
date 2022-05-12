@@ -31,6 +31,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
+import torch.backends.cudnn as cudnn
 from tqdm import tqdm
 torch.backends.cudnn.enabled = False
 
@@ -219,7 +220,7 @@ class GeoLifeCLEF2022Dataset(Dataset):
         
         n_unique = len(set(df_fr.species_id))
         species_unique = sorted(df_fr['species_id'].unique())
-        species_map = {s : i for s,i in zip(species_unique,range(1,n_unique+1)) }
+        species_map = {s : i for s,i in zip(species_unique,range(0,n_unique)) }
         df_fr['target_map'] = df_fr.species_id.map(species_map)
    
         df = copy.deepcopy(df_fr)
@@ -262,7 +263,6 @@ class GeoLifeCLEF2022Dataset(Dataset):
 
         filename = Path(self.root) / "patches-fr" / subfolder1 / subfolder2 / observation_id
         rgb_filename = filename.with_name(filename.stem + "_rgb.jpg")
-        # if os.path.exists(rgb_filename):
         patches = load_patch(
             observation_id, self.root, data=self.patch_data
         )
@@ -288,14 +288,65 @@ class GeoLifeCLEF2022Dataset(Dataset):
                 return patches
         else:
             return patches
-        # else:
-        #     pass
 
+def train_model(model, criterion, optimizer, num_epochs=3):
+    for epoch in pbar:
+        print('Epoch {}/{}'.format(epoch+1, num_epochs))
+        print('-' * 10)
 
-# def collate_fn(batch):
+        for phase in ['train', 'eval']:
+            if phase == 'train':
+                model.train()
+            else:
+                model.eval()
 
-#     batch = list(filter(lambda x: x is not None, batch))
-#     return torch.utils.data.dataloader.default_collate(batch)
+            running_loss = 0.0
+            running_corrects = 0
+            running_topk_error = 0
+
+            for batch in tqdm(dataloaders[phase]):
+                inputs, labels = batch
+
+                inputs = inputs.to(device)
+                labels = labels.to(device)
+                inputs = inputs.float()
+                inputs = inputs.view([len(labels), 3, 256, 256])
+
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+
+                if phase == 'train':
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
+
+                running_loss += loss.item() * inputs.size(0)
+                _, preds = torch.max(outputs, 1)
+                running_corrects += torch.sum(preds == labels.data)
+                
+                #top k-------------------------#
+                top_30_values,top_30_indices = torch.topk(F.log_softmax(outputs, dim=1), 30)
+                labels.unsqueeze_(1)
+                labels = labels.repeat(1,30)
+                batch_top30_acc = torch.sum(torch.sum(top_30_indices == labels)).item()
+
+                print(batch_top30_acc)
+                print(len(labels))
+
+                batch_top30_err = 1 - batch_top30_acc/len(labels)
+                running_topk_error += batch_top30_err
+
+            if phase == "train": image_len = train_size
+            else: image_len = val_size
+
+            epoch_loss = running_loss / image_len
+            epoch_acc = running_corrects.double() / image_len
+            epoch_topk = running_topk_error 
+            # print('{} loss: {:.4f}, acc: {:.4f}'.format(phase,
+            #                                             epoch_loss,
+            #                                             epoch_acc))
+            pbar.set_postfix({'Phase': phase, 'Loss': epoch_loss, 'Acc': epoch_acc.item(), 'Topk_Acc': epoch_topk})
+    return model
 
 DATA_PATH = Path("/scratch/fda239/Kaggle/data")
 # possible values: 'all', 'rgb', 'near_ir', 'landcover' or 'altitude'
@@ -330,182 +381,13 @@ print("Dataset created....")
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-#------------------------------------Old Model------------------------------------------------- 
-'''
-class ResidualBlock(torch.nn.Module):
-  def __init__(self, in_dim, out_dim, ksize):
-      super(ResidualBlock, self).__init__()
-      self.conv1 = nn.Conv2d(in_dim, out_dim, kernel_size=ksize, padding="same")
-      self.conv2 = nn.Conv2d(in_dim, out_dim, kernel_size=ksize, padding="same")
-      self.relu = nn.ReLU()
-
-  def forward(self, x):
-    # forward pass
-    identity = x 
-
-    out = self.relu(self.conv1(x))
-    out = self.conv2(out)
-    # combine forward pass and identity through addition
-
-    out += identity
-
-    return self.relu(out) 
-
-class CNN(torch.nn.Module):
-
-  def __init__(self, nfeatures, nclasses):
-    super().__init__()
-    self.nfeatures = nfeatures
-    self.nclasses = nclasses
-    self.kernel = 5
-    self.conv1 = nn.Conv2d(in_channels = 3, out_channels = self.nfeatures, kernel_size=self.kernel, padding="same")
-    self.bnorm1 = nn.BatchNorm2d(self.nfeatures)
-    self.pool = nn.MaxPool2d(self.kernel)
-    self.relu = nn.ReLU()
-
-    self.residual = ResidualBlock(self.nfeatures, self.nfeatures, self.kernel)
-    self.bnorm3 = nn.BatchNorm2d(self.nfeatures)
-
-    self.conv2 = nn.Conv2d(self.nfeatures, 50, kernel_size=5, padding="same")
-    self.bnorm2 = nn.BatchNorm2d(50)
-    self.pool = nn.MaxPool2d(self.kernel)
-    self.relu = nn.ReLU()
-
-    self.reshape = nn.Flatten()
-
-    self.fc1 = nn.Linear(5000, 7500)
-    self.relu = nn.ReLU()
-    self.bnorm4 = nn.BatchNorm1d(7500)
-
-    self.fc2 = nn.Linear(7500, 5000)
-    self.relu = nn.ReLU()
-    self.bnorm5 = nn.BatchNorm1d(5000)
-
-    self.fc3 = nn.Linear(5000, self.nclasses)
-
-    self.LSM = nn.LogSoftmax(dim=1)
-
-  def forward(self, x):
-    # print("Input shape:", x.shape)
-    x = self.conv1(x)
-    # print("Conv1:", x.shape)
-    x = self.bnorm1(x)
-    # print("BNorm1:", x.shape)
-    x = self.pool(x)
-    # print("Pool1:", x.shape)
-    x = self.relu(x)
-    # print("Relu1:", x.shape)
-
-    x = self.residual(x)
-    # print("Residual:", x.shape)
-    x = self.bnorm3(x)
-    # print("BNorm2:", x.shape)
-
-    x = self.conv2(x)
-    # print("Conv2:", x.shape)
-    x = self.bnorm2(x)
-    # print("BNorm2:", x.shape)
-    x = self.pool(x)
-    # print("Pool1:", x.shape)
-    x = self.relu(x)
-    # print("Relu2:", x.shape)
-
-    x = self.reshape(x)
-    # print("Reshape:", x.shape)
-    x = self.relu(self.fc1(x))
-    x = self.bnorm4(x)
-    # print("FC1:",x.shape)
-
-    x = self.relu(self.fc2(x))
-    x = self.bnorm5(x)
-    # print("FC2:",x.shape)
-
-    x = self.fc3(x)
-
-    x = self.LSM(x)
-    return x
-
-def get_loss_and_correct(model, batch, criterion, device):
-  # Implement forward pass and loss calculation for one batch.
-  # Remember to move the batch to device.
-  # 
-  # Return a tuple:
-  # - loss for the batch (Tensor)
-  # - number of correctly classified examples in the batch (Tensor)
-
-  data, labels = batch
-  data, labels = data.to(device), labels.to(device)
-  data = data.view([len(labels), 3, 256, 256])
-  data = data.float()
-
-  output = model(data)
-  loss = criterion(output, labels)
-
-  pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability                                                                 
-  correct = pred.eq(labels.data.view_as(pred)).cpu().sum()
-
-  return loss, correct
-
-def step(loss, optimizer):
-  Implement backward pass and update.
-  
-  optimizer.zero_grad()
-
-  loss.backward()
-
-  optimizer.step()
-'''
 
 
-def train_model(model, criterion, optimizer, num_epochs=3):
-    for epoch in pbar:
-        print('Epoch {}/{}'.format(epoch+1, num_epochs))
-        print('-' * 10)
-
-        for phase in ['train', 'eval']:
-            if phase == 'train':
-                model.train()
-            else:
-                model.eval()
-
-            running_loss = 0.0
-            running_corrects = 0
-
-            for inputs, labels in dataloaders[phase]:
-                
-                inputs = inputs.to(device)
-                labels = labels.to(device)
-                inputs = inputs.float()
-                inputs = inputs.view([len(labels), 3, 256, 256])
-
-                outputs = model(inputs)
-                loss = criterion(outputs, labels)
-
-                if phase == 'train':
-                    optimizer.zero_grad()
-                    loss.backward()
-                    optimizer.step()
-
-                _, preds = torch.max(outputs, 1)
-                running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
-
-            if phase == "train": image_len = val_size
-            else: image_len = train_size
-
-            epoch_loss = running_loss / image_len
-            epoch_acc = running_corrects.double() / image_len
-
-            # print('{} loss: {:.4f}, acc: {:.4f}'.format(phase,
-            #                                             epoch_loss,
-            #                                             epoch_acc))
-            pbar.set_postfix({'Phase': phase, 'Loss': epoch_loss, 'Acc': epoch_acc})
-    return model
 
 #Set of target species in filtered csv
 N_CLASSES = 4426
-N_EPOCHS = 5
-BATCH_SIZE = 256
+N_EPOCHS = 3
+BATCH_SIZE = 50
 
 train_size = int(0.8 * len(dataset))
 val_size = len(dataset) - train_size
@@ -532,6 +414,9 @@ model.fc = nn.Sequential(
 
 model.to(device)
 model = model.float()
+# model = torch.nn.DataParallel(model)
+# cudnn.benchmark = True
+
 criterion = nn.CrossEntropyLoss()
 
 # optimizer = torch.optim.SGD(model.parameters(), lr=0.005, momentum=0.9, weight_decay=0.9)
@@ -544,39 +429,3 @@ validation_accuracies = []
 
 pbar = tqdm(range(N_EPOCHS))
 model_trained = train_model(model, criterion, optimizer, num_epochs=N_EPOCHS)
-'''
-for i in pbar:
-  total_train_loss = 0.0
-  total_train_correct = 0.0
-  total_validation_loss = 0.0
-  total_validation_correct = 0.0
-
-  model.train()
-
-  for batch in tqdm(train_loader, leave=False):
-    loss, correct = get_loss_and_correct(model, batch, criterion, device)
-    step(loss, optimizer)
-    total_train_loss += loss.item()
-    total_train_correct += correct.item()
-
-  with torch.no_grad():
-    for batch in val_loader:
-      loss, correct = get_loss_and_correct(model, batch, criterion, device)
-      total_validation_loss += loss.item()
-      total_validation_correct += correct.item()
-
-  mean_train_loss = total_train_loss / len(train_dataset)
-  train_accuracy = total_train_correct / len(train_dataset)
-
-  mean_validation_loss = total_validation_loss / len(val_dataset)
-  validation_accuracy = total_validation_correct / len(val_dataset)
-
-  train_losses.append(mean_train_loss)
-  validation_losses.append(mean_validation_loss)
-
-  train_accuracies.append(train_accuracy)
-  validation_accuracies.append(validation_accuracy)
-
-  pbar.set_postfix({'train_loss': mean_train_loss, \
-  'validation_loss': mean_validation_loss, 'train_accuracy': train_accuracy, 'validation_accuracy': validation_accuracy})
-  '''

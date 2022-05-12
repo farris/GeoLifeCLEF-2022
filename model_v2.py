@@ -262,7 +262,6 @@ class GeoLifeCLEF2022Dataset(Dataset):
 
         filename = Path(self.root) / "patches-fr" / subfolder1 / subfolder2 / observation_id
         rgb_filename = filename.with_name(filename.stem + "_rgb.jpg")
-        # if os.path.exists(rgb_filename):
         patches = load_patch(
             observation_id, self.root, data=self.patch_data
         )
@@ -288,14 +287,6 @@ class GeoLifeCLEF2022Dataset(Dataset):
                 return patches
         else:
             return patches
-        # else:
-        #     pass
-
-
-# def collate_fn(batch):
-
-#     batch = list(filter(lambda x: x is not None, batch))
-#     return torch.utils.data.dataloader.default_collate(batch)
 
 DATA_PATH = Path("/scratch/fda239/Kaggle/data")
 # possible values: 'all', 'rgb', 'near_ir', 'landcover' or 'altitude'
@@ -308,25 +299,6 @@ dataset = GeoLifeCLEF2022Dataset(DATA_PATH,subset = "train",
                                  patch_extractor = None )
 print("Dataset created....")
 
-
-# train_loader = DataLoader(dataset, batch_size=2,num_workers = 0,shuffle = False,drop_last=True,collate_fn=lambda x: x )
-# train_loader = DataLoader(dataset, batch_size=2,num_workers = 0,shuffle = False,drop_last=True)
-
-
-
-# print("Len train_loader:", len(train_loader))
-# count = 0
-# for batch in train_loader:
-#     # print("Batch size:", len(batch))
-#     print('-----------------------------------')
-#     count += 1
-#     # print("count:", count)
-#     print(batch)
-#     print('-----------------------------------')
-#     if count == 20:
-#         break
-
-# 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -467,14 +439,14 @@ train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size,
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE,num_workers = 0,shuffle = True,drop_last=True)
 val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers = 0,shuffle = False,drop_last=True)
 
-#Print image and target size and show image
-# rgb_batch, target = iter(train_loader).next()
-# plt.figure(figsize=(10, 12))
-# print("RGB image size: ", rgb_batch.shape)
-# print ("Target size: ", target.shape)
-# plt.imshow(rgb_batch[0])
-# plt.savefig('test.png')
-# raise SystemExit(0)
+# Print image and target size and show image
+rgb_batch, target = iter(train_loader).next()
+plt.figure(figsize=(10, 12))
+print("RGB image size: ", rgb_batch.shape)
+print ("Target size: ", target.shape)
+plt.imshow(rgb_batch[0])
+plt.savefig('test.png')
+raise SystemExit(0)
 
 model = CNN(25, N_CLASSES)
 model.to(device)
