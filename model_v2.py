@@ -30,7 +30,7 @@ import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.models as models
+from torchvision.models.resnet import ResNet, BasicBlock
 from tqdm import tqdm
 torch.backends.cudnn.enabled = False
 
@@ -330,8 +330,7 @@ print("Dataset created....")
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-#------------------------------------Old Model------------------------------------------------- 
-'''
+# ----------COPY AND PASTE FROM DL HOMEWORK 3 CNN ---------------------------------------------
 class ResidualBlock(torch.nn.Module):
   def __init__(self, in_dim, out_dim, ksize):
       super(ResidualBlock, self).__init__()
@@ -447,64 +446,18 @@ def get_loss_and_correct(model, batch, criterion, device):
   return loss, correct
 
 def step(loss, optimizer):
-  Implement backward pass and update.
+  # Implement backward pass and update.
   
   optimizer.zero_grad()
 
   loss.backward()
 
   optimizer.step()
-'''
 
-
-def train_model(model, criterion, optimizer, num_epochs=3):
-    for epoch in pbar:
-        print('Epoch {}/{}'.format(epoch+1, num_epochs))
-        print('-' * 10)
-
-        for phase in ['train', 'eval']:
-            if phase == 'train':
-                model.train()
-            else:
-                model.eval()
-
-            running_loss = 0.0
-            running_corrects = 0
-
-            for inputs, labels in dataloaders[phase]:
-                
-                inputs = inputs.to(device)
-                labels = labels.to(device)
-                inputs = inputs.float()
-                inputs = inputs.view([len(labels), 3, 256, 256])
-
-                outputs = model(inputs)
-                loss = criterion(outputs, labels)
-
-                if phase == 'train':
-                    optimizer.zero_grad()
-                    loss.backward()
-                    optimizer.step()
-
-                _, preds = torch.max(outputs, 1)
-                running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
-
-            if phase == "train": image_len = val_size
-            else: image_len = train_size
-
-            epoch_loss = running_loss / image_len
-            epoch_acc = running_corrects.double() / image_len
-
-            # print('{} loss: {:.4f}, acc: {:.4f}'.format(phase,
-            #                                             epoch_loss,
-            #                                             epoch_acc))
-            pbar.set_postfix({'Phase': phase, 'Loss': epoch_loss, 'Acc': epoch_acc})
-    return model
 
 #Set of target species in filtered csv
 N_CLASSES = 4426
-N_EPOCHS = 5
+N_EPOCHS = 100
 BATCH_SIZE = 256
 
 train_size = int(0.8 * len(dataset))
@@ -513,7 +466,6 @@ val_size = len(dataset) - train_size
 train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE,num_workers = 0,shuffle = True,drop_last=True)
 val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers = 0,shuffle = False,drop_last=True)
-dataloaders = {"train": train_loader, "eval":val_loader}
 
 #Print image and target size and show image
 # rgb_batch, target = iter(train_loader).next()
@@ -524,12 +476,7 @@ dataloaders = {"train": train_loader, "eval":val_loader}
 # plt.savefig('test.png')
 # raise SystemExit(0)
 
-model = models.resnet50(pretrained=False)
-model.fc = nn.Sequential(
-               nn.Linear(2048, 5000),
-               nn.ReLU(inplace=True),
-               nn.Linear(5000, N_CLASSES))
-
+model = CNN(25, N_CLASSES)
 model.to(device)
 model = model.float()
 criterion = nn.CrossEntropyLoss()
@@ -543,8 +490,7 @@ validation_losses = []
 validation_accuracies = []
 
 pbar = tqdm(range(N_EPOCHS))
-model_trained = train_model(model, criterion, optimizer, num_epochs=N_EPOCHS)
-'''
+
 for i in pbar:
   total_train_loss = 0.0
   total_train_correct = 0.0
@@ -579,4 +525,3 @@ for i in pbar:
 
   pbar.set_postfix({'train_loss': mean_train_loss, \
   'validation_loss': mean_validation_loss, 'train_accuracy': train_accuracy, 'validation_accuracy': validation_accuracy})
-  '''
