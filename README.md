@@ -1,5 +1,5 @@
 # GeoLifeCLEF-2022
-Authored by: Zafir Momin & Farris Atif
+Authored by: Zafir Momin & Farris Atif  
 NYU Center for Data Science
 
 # Introduction:
