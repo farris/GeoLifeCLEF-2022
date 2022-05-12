@@ -20,7 +20,16 @@ As a result, the data was stored on the NYU Greene Cluster. Due to quota limitat
 
 <img src="https://github.com/farris/GeoLifeCLEF-2022/blob/master/test.png" width="400" height="400">
 
+# File Structure & Guide
+
+(placeholder)
+
 # Implementation
 
 (placeholder)
+
+# Evaluation
+
+(placeholder)
+
 
