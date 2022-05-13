@@ -1,4 +1,4 @@
-# GeoLifeCLEF-2022
+# GeoLifeCLEF-2022 :palm_tree:
 Authored by: Zafir Momin & Farris Atif  
 NYU Center for Data Science
 
