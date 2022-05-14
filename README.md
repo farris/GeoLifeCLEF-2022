@@ -13,9 +13,22 @@ The rise of deep learning in image/object recognition tasks has opened the gate 
 
 # Data
 
-Put simply, this dataset is huge. There are 1.6M geo-localized observations from France and the US, each of which has 4 corresponding images (rgb aerial image, tiff aerial image, altitude scan, and landcover). Additionally environmental rasters (metadata) are available for each observation which could be fed into a model for added information. In total there are 6.72M files and 61 columns of data.
+Put simply, this dataset is huge. In total there are 6.72M files and 61 columns of data. More specifically, there are 1.6M geo-localized observations from France and the US, each of which has 4 corresponding images, summarized as follows:
+1. Remote sensing imagery: 256mx256m RGB-IR patches centered at each observation. 
+* Format: 256x256 JPEG images, a color JPEG file for RGB data and a grayscale one for near-infrared. 
+* Resolution: 1 meter per pixel. 
+* Source: NAIP for US and IGN for France. 
+2. Land cover data: 256mx256m patches centered at each observation. 
+* Format: 256x256 TIFF files with Deflate compression. 
+* Resolution: 1 meter per pixel. 
+* Source: NLCD for US and Cesbio for France. 
+3. Altitude data: 256mx256m patches centered at each observation. 
+* Format: 256x256 TIFF files with Deflate compression. 
+* Resolution: 1 meter per pixel. 
+* Source: SRTMGL1 for US and FranceAdditionally environmental rasters (metadata) are available for each observation which could be fed into a model for added information.  
+4. RGB Aerial Scan 
 
-As a result, the data was stored on the [NYU Greene Cluster](https://sites.google.com/nyu.edu/nyu-hpc/home?authuser=0). Due to quota limitations however, we only were able to obtain image scans from 'patches_fr' (France geo observations), and were not able to store the rasters. In summary, we were able to store 221588/671246 of the image scans from France, and the corresponding target species. This was divided for the training+val+test splits. Below is a snapshot of one of the rgb images used for training:
+As a result, the data was stored on the [NYU Greene Cluster](https://sites.google.com/nyu.edu/nyu-hpc/home?authuser=0). Due to quota limitations however, we only were able to obtain image scans from 'patches_fr' (France geo observations), and were not able to store the rasters. In summary, we were able to store 221588/671246 of the image scans from France, and the corresponding target species. This was divided for the training+val+test splits. Below is a snapshot of one of the RGB images used for training:
 
 
 <img src="https://github.com/farris/GeoLifeCLEF-2022/blob/master/images/rgb_show.png" width="400" height="400">
