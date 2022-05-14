@@ -4,7 +4,3 @@ observations/
 GLC/
 geolifeclef-2022-lifeclef-2022-fgvc9.zip
 wandb/
-
-*
-*/
-!.gitignore
