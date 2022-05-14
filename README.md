@@ -18,7 +18,7 @@ Put simply, this dataset is huge. There are 1.6M geo-localized observations from
 As a result, the data was stored on the [NYU Greene Cluster](https://sites.google.com/nyu.edu/nyu-hpc/home?authuser=0). Due to quota limitations however, we only were able to obtain image scans from 'patches_fr' (France geo observations), and were not able to store the rasters. In summary, we were able to store 221588/671246 of the image scans from France, and the corresponding target species. This was divided for the training+val+test splits. Below is a snapshot of one of the rgb images used for training:
 
 
-<img src="https://github.com/farris/GeoLifeCLEF-2022/blob/master/test.png" width="400" height="400">
+<img src="https://github.com/farris/GeoLifeCLEF-2022/blob/master/images/rgb_show.png" width="400" height="400">
 
 # File Structure & Guide
 
