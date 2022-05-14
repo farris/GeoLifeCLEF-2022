@@ -34,7 +34,7 @@ import torch.backends.cudnn as cudnn
 from tqdm import tqdm
 torch.backends.cudnn.enabled = False
 import wandb
-
+from torch.optim.lr_scheduler import StepLR
 
 def get_train_transforms():
     return Compose([
@@ -415,6 +415,7 @@ criterion = nn.CrossEntropyLoss()
 
 # optimizer = torch.optim.SGD(model.parameters(), lr=0.005, momentum=0.9, weight_decay=0.9)
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, amsgrad=True)
+scheduler = StepLR(optimizer, step_size=2, gamma=0.1)
 
 pbar = tqdm(range(N_EPOCHS))
 model_trained = train_model(model, criterion, optimizer, num_epochs=N_EPOCHS, top_k=TOP_K)
