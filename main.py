@@ -1,22 +1,20 @@
-import skimage.io
-from skimage.io import imread
-import tifffile 
-import matplotlib
-import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
-from tqdm.notebook import tqdm
-import cv2
-import shutil, json
+# import skimage.io
+# from skimage.io import imread
+# import tifffile 
+# import matplotlib
+# import matplotlib.pyplot as plt
+# from matplotlib.patches import Patch
+# import seaborn as sns
+# import cv2
 import tensorflow as tf
+import shutil, json
 import glob, os
-import seaborn as sns
 import gc, pandas as pd, numpy as np
 import warnings
 from warnings import WarningMessage, filterwarnings
 import sys
 import os
 from pathlib import Path
-import pandas as pd
 from albumentations import (
     HorizontalFlip, VerticalFlip, IAAPerspective, ShiftScaleRotate, CLAHE, RandomRotate90,
     Transpose, ShiftScaleRotate, Blur, OpticalDistortion, GridDistortion, HueSaturationValue,
@@ -37,7 +35,6 @@ from tqdm import tqdm
 torch.backends.cudnn.enabled = False
 import wandb
 
-wandb.init(project="DLS", entity="zmomin")
 
 def get_train_transforms():
     return Compose([
@@ -293,7 +290,9 @@ class GeoLifeCLEF2022Dataset(Dataset):
         else:
             return patches
 
-def train_model(model, criterion, optimizer, num_epochs=3):
+def train_model(model, criterion, optimizer, num_epochs=3, top_k=30):
+    wandb.watch(model, criterion, log="all", log_freq=1)
+
     for epoch in pbar:
         print('Epoch {}/{}'.format(epoch+1, num_epochs))
         print('-' * 10)
@@ -329,13 +328,20 @@ def train_model(model, criterion, optimizer, num_epochs=3):
                 running_corrects += torch.sum(preds == labels.data)
                 
                 #top k-------------------------#
-                top_30_values,top_30_indices = torch.topk(F.log_softmax(outputs, dim=1), 30)
-                labels.unsqueeze_(1)
-                labels = labels.repeat(1,30)
-                batch_top30_acc = torch.sum(torch.sum(top_30_indices == labels)).item()
+                top_30_values,top_30_indices = torch.topk(F.log_softmax(outputs, dim=1), top_k)
+                batch_top30_acc = torch.sum(top_30_indices == labels.view(-1,1)).float()
 
-                batch_top30_err = 1 - batch_top30_acc/len(labels)
-                running_topk_error += batch_top30_err
+                batch_top30_err = 1 - (batch_top30_acc / len(labels))
+                running_topk_error += batch_top30_err.item()
+
+                del _
+                del preds
+                del top_30_values
+                del top_30_indices
+                del inputs
+                # gc.collect()
+                # torch.cuda.empty_cache()
+                #bottom of batch train loop --------------------------------------
             
             if phase == "train": image_len = train_size
             else: image_len = val_size
@@ -347,6 +353,15 @@ def train_model(model, criterion, optimizer, num_epochs=3):
             #                                             epoch_loss,
             #                                             epoch_acc))
             pbar.set_postfix({'Phase': phase, 'Loss': epoch_loss, 'Acc': epoch_acc.item(), 'Topk_Err': epoch_topk})
+            if phase == "train":
+                train_loss = epoch_loss
+                train_acc = epoch_acc.item()
+                train_topk = epoch_topk
+        
+        wandb.log({
+            "Epoch": epoch, "Train_Loss": train_loss, "Train_Acc": train_acc, "Train_TopK": train_topk,
+            "Val_Loss": epoch_loss, "Val_Acc": epoch_acc, "Val_TopK": epoch_topk
+            })
     return model
 
 DATA_PATH = Path("/scratch/fda239/Kaggle/data")
@@ -364,15 +379,20 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 #Set of target species in filtered csv
 N_CLASSES = 4426
-N_EPOCHS = 3
-BATCH_SIZE = 200
+N_EPOCHS = 100
+BATCH_SIZE = 128
 LEARNING_RATE = 0.005
+TOP_K = 30
 
-wandb.config = {
+config_dict = {
   "learning_rate": LEARNING_RATE,
   "epochs": N_EPOCHS,
-  "batch_size": BATCH_SIZE
+  "batch_size": BATCH_SIZE,
+  "TopK":TOP_K
 }
+
+print("WandB Project Initialized")
+wandb.init(config=config_dict, project="DLS", entity="dls-glc")
 
 train_size = int(0.8 * len(dataset))
 val_size = len(dataset) - train_size
@@ -396,10 +416,5 @@ criterion = nn.CrossEntropyLoss()
 # optimizer = torch.optim.SGD(model.parameters(), lr=0.005, momentum=0.9, weight_decay=0.9)
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, amsgrad=True)
 
-# train_losses = []
-# train_accuracies = []
-# validation_losses = []
-# validation_accuracies = []
-
 pbar = tqdm(range(N_EPOCHS))
-model_trained = train_model(model, criterion, optimizer, num_epochs=N_EPOCHS)
+model_trained = train_model(model, criterion, optimizer, num_epochs=N_EPOCHS, top_k=TOP_K)

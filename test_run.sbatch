@@ -2,10 +2,10 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
-#SBATCH --time=4:00:00
-#SBATCH --mem=8GB
+#SBATCH --time=12:00:00
+#SBATCH --mem=16GB
 #SBATCH --gres=gpu:1
-#SBATCH --job-name=E100_Adam5e_3
+#SBATCH --job-name=E100_Adam5e3
 #SBATCH --mail-type=END
 #SBATCH --mail-user=zm2114@nyu.edu
 #SBATCH --output=slurm_%j.out
