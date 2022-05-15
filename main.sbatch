@@ -23,4 +23,4 @@ module load cuda/11.3.1
 source activate /scratch/fda239/penv2
 
 cd /scratch/fda239/Kaggle
-python main_all.py 
+python main_v2.py
