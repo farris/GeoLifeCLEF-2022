@@ -75,7 +75,7 @@ python filterobs.py
 ```
 to return a new observations csv containing instances only existing in your data/patches-fr or data/patches-us directory(ies)
 
-If on Linux cluster, you can use main.sbatch to run the different model variations we have under models/
+If on a Linux cluster, you can use main.sbatch to run the different model variations we have under models via SLURM/
 
 # Evaluation
 
