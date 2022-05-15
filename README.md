@@ -37,6 +37,7 @@ As a result, the data was stored on the [NYU Greene Cluster](https://sites.googl
 ```
 GeoLifeCLEF-2022/
 ├─ GLC (competition source code)/
+├─ wandb/
 ├─ data (on cluster)/
 │  ├─ metadata
 │  ├─ observations
@@ -87,6 +88,6 @@ Below is a table summarizing configurations run, their WandB code names, and ass
 |ResNet18|<p>apricot-cherry-16</p><p>serene-totem-15</p>|<p>main\_v4</p><p>main\_v3</p>|<p>512</p><p>*(128x4 image types)*</p>|50|Adam/3e-4|10/.1|All|<p>Tesla V100</p><p></p>|
 
 
-Since we are trying to predict 17k+ classes in total, error is difficult to minimuze/quantify as a metric. As a result, the chosen metric of the competition is top_30 error (For each of the top 30 softmax scores for each input x, +1 if the correct target y label is in that vector). The graph below shows the top_30 error on the holdout set across training epochs
+Since we are trying to predict 17k+ classes in total, error is difficult to minimize/quantify as a metric. As a result, the chosen metric of the competition is top_30 error (For each of the top 30 softmax scores for each input x, +1 if the correct target y label is in that vector). The graph below shows the top_30 error on the holdout set across training epochs
 
 <img width="600" img height = '500' alt="Screen Shot 2022-05-15 at 2 10 15 PM" src="https://user-images.githubusercontent.com/70980118/168487605-daa91534-a522-487d-8b5e-f517763b46ec.png" >
