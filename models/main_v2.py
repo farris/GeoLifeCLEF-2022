@@ -290,7 +290,7 @@ class GeoLifeCLEF2022Dataset(Dataset):
         else:
             return patches
 
-def train_model(model, criterion, optimizer, num_epochs=3, top_k=30):
+def train_model(model, criterion, optimizer, scheduler, num_epochs=3, top_k=30):
     wandb.watch(model, criterion, log="all", log_freq=1)
 
     for epoch in pbar:
@@ -362,6 +362,7 @@ def train_model(model, criterion, optimizer, num_epochs=3, top_k=30):
             "Epoch": epoch, "Train_Loss": train_loss, "Train_Acc": train_acc, "Train_TopK": train_topk,
             "Val_Loss": epoch_loss, "Val_Acc": epoch_acc, "Val_TopK": epoch_topk
             })
+        scheduler.step()
     return model
 
 DATA_PATH = Path("/scratch/fda239/Kaggle/data")
@@ -380,7 +381,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 #Set of target species in filtered csv
 N_CLASSES = 4426
 N_EPOCHS = 100
-BATCH_SIZE = 128
+BATCH_SIZE = 164
 LEARNING_RATE = 0.005
 TOP_K = 30
 
@@ -415,7 +416,7 @@ criterion = nn.CrossEntropyLoss()
 
 # optimizer = torch.optim.SGD(model.parameters(), lr=0.005, momentum=0.9, weight_decay=0.9)
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, amsgrad=True)
-scheduler = StepLR(optimizer, step_size=2, gamma=0.1)
+scheduler = StepLR(optimizer, step_size=20, gamma=0.2)
 
 pbar = tqdm(range(N_EPOCHS))
-model_trained = train_model(model, criterion, optimizer, num_epochs=N_EPOCHS, top_k=TOP_K)
+model_trained = train_model(model, criterion, optimizer, scheduler, num_epochs=N_EPOCHS, top_k=TOP_K)

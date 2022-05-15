@@ -1,26 +1,20 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
 import skimage.io
 from skimage.io import imread
 import tifffile 
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
-from tqdm.notebook import tqdm
-import cv2
-import shutil, json
-import tensorflow as tf
-import glob, os
 import seaborn as sns
+import cv2
+import tensorflow as tf
+import shutil, json
+import glob, os
 import gc, pandas as pd, numpy as np
 import warnings
 from warnings import WarningMessage, filterwarnings
 import sys
 import os
 from pathlib import Path
-import pandas as pd
 from albumentations import (
     HorizontalFlip, VerticalFlip, IAAPerspective, ShiftScaleRotate, CLAHE, RandomRotate90,
     Transpose, ShiftScaleRotate, Blur, OpticalDistortion, GridDistortion, HueSaturationValue,
@@ -39,106 +33,9 @@ import torchvision.models as models
 import torch.backends.cudnn as cudnn
 from tqdm import tqdm
 torch.backends.cudnn.enabled = False
+import wandb
+from torch.optim.lr_scheduler import StepLR
 
-
-def conv3x3(in_planes, out_planes, stride=1):
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
-
-
-class BasicBlock(nn.Module):
-    expansion = 1
-
-    def __init__(self, in_planes, planes, stride=1):
-        super(BasicBlock, self).__init__()
-        self.conv1 = conv3x3(in_planes, planes, stride)
-        self.bn1 = nn.BatchNorm2d(planes)
-        self.conv2 = conv3x3(planes, planes)
-        self.bn2 = nn.BatchNorm2d(planes)
-
-        self.shortcut = nn.Sequential()
-        if stride != 1 or in_planes != self.expansion*planes:
-            self.shortcut = nn.Sequential(
-                nn.Conv2d(in_planes, self.expansion*planes, kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(self.expansion*planes)
-            )
-
-    def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
-        out += self.shortcut(x)
-        out = F.relu(out)
-        return out
-
-
-class Bottleneck(nn.Module):
-    expansion = 4
-
-    def __init__(self, in_planes, planes, stride=1):
-        super(Bottleneck, self).__init__()
-        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(planes)
-        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(planes)
-        self.conv3 = nn.Conv2d(planes, self.expansion*planes, kernel_size=1, bias=False)
-        self.bn3 = nn.BatchNorm2d(self.expansion*planes)
-
-        self.shortcut = nn.Sequential()
-        if stride != 1 or in_planes != self.expansion*planes:
-            self.shortcut = nn.Sequential(
-                nn.Conv2d(in_planes, self.expansion*planes, kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(self.expansion*planes)
-            )
-
-    def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = F.relu(self.bn2(self.conv2(out)))
-        out = self.bn3(self.conv3(out))
-        out += self.shortcut(x)
-        out = F.relu(out)
-        return out
-
-
-class ResNet(nn.Module):
-    def __init__(self, block, num_blocks, num_classes=10):
-        super(ResNet, self).__init__()
-        self.in_planes = 64
-
-        self.conv1 = conv3x3(3,64)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.layer1 = self._make_layer(block, 64, num_blocks[0], stride=1)
-        self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
-        self.linear = nn.Linear(512*block.expansion, num_classes)
-
-    def _make_layer(self, block, planes, num_blocks, stride):
-        strides = [stride] + [1]*(num_blocks-1)
-        layers = []
-        for stride in strides:
-            layers.append(block(self.in_planes, planes, stride))
-            self.in_planes = planes * block.expansion
-        return nn.Sequential(*layers)
-
-    def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = self.layer1(out)
-        out = self.layer2(out)
-        out = self.layer3(out)
-        out = self.layer4(out)
-        out = F.avg_pool2d(out, 4)
-        out = out.view(out.size(0), -1)
-        out = self.linear(out)
-        return out
-
-
-def ResNet18(num_classes=10):
-    return ResNet(BasicBlock, [2,2,2,2], num_classes)
-
-def ResNet34(num_classes=10):
-    return ResNet(BasicBlock, [3,4,6,3], num_classes)
-
-def ResNet50(num_classes=10):
-    return ResNet(Bottleneck, [3,4,6,3], num_classes)
 
 def get_train_transforms():
     return Compose([
@@ -212,9 +109,36 @@ def load_patch(
     patches = []
 
     if data == "all":
+        rgb_patches,near_ir_patches,altitude_patches,landcover_patches = [],[],[],[]
         data = ["rgb", "near_ir", "landcover", "altitude"]
 
-    if "rgb" in data:
+        rgb_filename = filename.with_name(filename.stem + "_rgb.jpg")
+        if os.path.exists(rgb_filename):
+            rgb_patch = Image.open(rgb_filename)
+            rgb_patch = np.asarray(rgb_patch)
+            rgb_patches.append(rgb_patch)
+
+        near_ir_filename = filename.with_name(filename.stem + "_near_ir.jpg")
+        if os.path.exists(near_ir_filename):
+            near_ir_patch = Image.open(near_ir_filename)
+            near_ir_patch = np.asarray(near_ir_patch)
+            near_ir_patches.append(near_ir_patch)
+
+        altitude_filename = filename.with_name(filename.stem + "_altitude.tif")
+        if os.path.exists(altitude_filename):
+            altitude_patch = tifffile.imread(altitude_filename)
+            altitude_patches.append(altitude_patch)
+
+        landcover_filename = filename.with_name(filename.stem + "_landcover.tif")
+        if os.path.exists(landcover_filename):
+            landcover_patch = tifffile.imread(landcover_filename)
+            if landcover_mapping is not None:
+                landcover_patch = landcover_mapping[landcover_patch]
+            landcover_patches.append(landcover_patch)
+
+        return rgb_patches,near_ir_patches,altitude_patches,landcover_patches
+
+    elif "rgb" in data:
        
         rgb_filename = filename.with_name(filename.stem + "_rgb.jpg")
         if os.path.exists(rgb_filename):
@@ -224,22 +148,22 @@ def load_patch(
             patches.append(rgb_patch)
         
             
-    if "near_ir" in data:
+    elif "near_ir" in data:
         near_ir_filename = filename.with_name(filename.stem + "_near_ir.jpg")
         near_ir_patch = Image.open(near_ir_filename)
         if return_arrays:
             near_ir_patch = np.asarray(near_ir_patch)
         patches.append(near_ir_patch)
 
-    if "altitude" in data:
+    elif "altitude" in data:
 
         altitude_filename = filename.with_name(filename.stem + "_altitude.tif")
        
         if os.path.exists(altitude_filename):
             altitude_patch = tifffile.imread(altitude_filename)
-            patches.append(altitude_patch)
+        patches.append(altitude_patch)
 
-    if "landcover" in data:
+    elif "landcover" in data:
   
         landcover_filename = filename.with_name(filename.stem + "_landcover.tif")
 
@@ -338,7 +262,7 @@ class GeoLifeCLEF2022Dataset(Dataset):
         self.coordinates = df[["latitude", "longitude"]].values
         
         if self.training_data:
-            self.targets =df.target_map.values #df.species_id ---> df.target_map
+            self.targets = df.target_map.values #df.species_id ---> df.target_map
         else:
             self.targets = None
 
@@ -368,11 +292,16 @@ class GeoLifeCLEF2022Dataset(Dataset):
 
         filename = Path(self.root) / "patches-fr" / subfolder1 / subfolder2 / observation_id
         rgb_filename = filename.with_name(filename.stem + "_rgb.jpg")
-        patches = load_patch(
+        rgb_patches,near_ir_patches,altitude_patches,landcover_patches = load_patch(
             observation_id, self.root, data=self.patch_data
         )
-        patches = torch.tensor(np.array(patches))
-        
+        rgb_patches = torch.tensor(np.array(rgb_patches))
+        near_ir_patches = torch.tensor(np.array(near_ir_patches)).unsqueeze_(-1).repeat(1,1,1,3)
+        altitude_patches = torch.tensor(np.array(altitude_patches)).unsqueeze_(-1).repeat(1,1,1,3)
+        landcover_patches = torch.tensor(np.array(landcover_patches)).unsqueeze_(-1).repeat(1,1,1,3)
+        patches = torch.cat([rgb_patches,near_ir_patches,altitude_patches,landcover_patches])
+        patches = patches.view(-1, 256,256, 3)
+       
         if patches is not None:
             
             if len(patches) == 1:
@@ -384,7 +313,7 @@ class GeoLifeCLEF2022Dataset(Dataset):
 
             if self.training_data:
                 target = self.targets[index]
-
+                target = np.asarray([target for i in range(4)])
                 if self.target_transform:
                     target = self.target_transform(target)
 
@@ -394,11 +323,13 @@ class GeoLifeCLEF2022Dataset(Dataset):
         else:
             return patches
 
-def train_model(model, device,criterion, optimizer, num_epochs=3):
+def train_model(model, criterion, optimizer,scheduler ,num_epochs=3, top_k=30):
+    wandb.watch(model, criterion, log="all", log_freq=1)
+
     for epoch in pbar:
         print('Epoch {}/{}'.format(epoch+1, num_epochs))
         print('-' * 10)
-
+        
         for phase in ['train', 'eval']:
             if phase == 'train':
                 model.train()
@@ -413,10 +344,11 @@ def train_model(model, device,criterion, optimizer, num_epochs=3):
                 inputs, labels = batch
 
                 inputs = inputs.to(device)
-                labels = labels.to(device)
                 inputs = inputs.float()
-                inputs = inputs.view([len(labels), 3, 256, 256])
+                inputs = inputs.view([len(labels)*4, 3, 256, 256])
 
+                labels = labels.to(device)
+                labels = labels.view([-1])
                 outputs = model(inputs)
                 loss = criterion(outputs, labels)
 
@@ -430,13 +362,20 @@ def train_model(model, device,criterion, optimizer, num_epochs=3):
                 running_corrects += torch.sum(preds == labels.data)
                 
                 #top k-------------------------#
-                top_30_values,top_30_indices = torch.topk(F.log_softmax(outputs, dim=1), 30)
-                labels.unsqueeze_(1)
-                labels = labels.repeat(1,30)
-                batch_top30_acc = torch.sum(torch.sum(top_30_indices == labels)).item()
+                top_30_values,top_30_indices = torch.topk(F.log_softmax(outputs, dim=1), top_k)
+                batch_top30_acc = torch.sum(top_30_indices == labels.view(-1,1)).float()
 
-                batch_top30_err = 1 - batch_top30_acc/len(labels)
-                running_topk_error += batch_top30_err
+                batch_top30_err = 1 - (batch_top30_acc / len(labels))
+                running_topk_error += batch_top30_err.item()
+
+                del _
+                del preds
+                del top_30_values
+                del top_30_indices
+                del inputs
+                # gc.collect()
+                # torch.cuda.empty_cache()
+                #bottom of batch train loop --------------------------------------
             
             if phase == "train": image_len = train_size
             else: image_len = val_size
@@ -447,82 +386,73 @@ def train_model(model, device,criterion, optimizer, num_epochs=3):
             # print('{} loss: {:.4f}, acc: {:.4f}'.format(phase,
             #                                             epoch_loss,
             #                                             epoch_acc))
-            pbar.set_postfix({'Phase': phase, 'Loss': epoch_loss, 'Acc': epoch_acc.item(), 'Topk_Err': epoch_topk})
+            pbar.set_postfix({'Phase': phase, 'Loss': epoch_loss, 'Acc': epoch_acc.item(), 'Topk_Err': epoch_topk/4})
+            if phase == "train":
+                train_loss = epoch_loss
+                train_acc = epoch_acc.item()
+                train_topk = epoch_topk
+        
+        wandb.log({
+            "Epoch": epoch, "Train_Loss": train_loss/4, "Train_Acc": train_acc/4, "Train_TopK": train_topk/4,
+            "Val_Loss": epoch_loss/4, "Val_Acc": epoch_acc/4, "Val_TopK": epoch_topk/4
+            })
+        # scheduler.step()
     return model
 
-def setup(rank, world_size):
-    # initialize the process group
-    dist.init_process_group("nccl", rank=rank, world_size=world_size)
+DATA_PATH = Path("/scratch/fda239/Kaggle/data")
+# possible values: 'all', 'rgb', 'near_ir', 'landcover' or 'altitude'
+dataset = GeoLifeCLEF2022Dataset(DATA_PATH,subset = "train", 
+                                 region = 'fr', 
+                                 patch_data = 'all', \
+                                 use_rasters = None,\
+                                 #transform = get_train_transforms(),\
+                                 transform = None,\
+                                 patch_extractor = None )
+print("Dataset created....")
 
-def main():
-    # Training settings
-    parser = argparse.ArgumentParser(description='Lets Go')
-    parser.add_argument('--batch-size', type=int, default=64, metavar='N',
-                        help='input batch size for training (default: 64)')
-    parser.add_argument('--epochs', type=int, default=14, metavar='N',
-                        help='number of epochs to train (default: 14)')
-    parser.add_argument('--lr', type=float, default=1.0, metavar='LR',
-                        help='learning rate (default: 1.0)')
- 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    args = parser.parse_args()
-                               
-    DATA_PATH = Path("/scratch/fda239/Kaggle/data")
-    dataset = GeoLifeCLEF2022Dataset(DATA_PATH,subset = "train", 
-                                    region = 'fr', 
-                                    patch_data = 'rgb', \
-                                    use_rasters = None,\
-                                    #transform = get_train_transforms(),\
-                                    transform = None,\
-                                    patch_extractor = None )
-    print("Dataset created....")
+#Set of target species in filtered csv
+N_CLASSES = 4426
+N_EPOCHS = 100
+BATCH_SIZE = 128
+LEARNING_RATE = 3e-4
+TOP_K = 30
 
-    world_size = int(os.environ["WORLD_SIZE"])
-    rank = int(os.environ["SLURM_PROCID"])
-    gpus_per_node = int(os.environ["SLURM_GPUS_ON_NODE"])
-    
-    assert gpus_per_node == torch.cuda.device_count()
-    print(f"Hello from rank {rank} of {world_size} on {gethostname()} where there are" \
-          f" {gpus_per_node} allocated GPUs per node.", flush=True)
-    
-    setup(rank, world_size)
-    
-    if rank == 0: print(f"Group initialized? {dist.is_initialized()}", flush=True)
+config_dict = {
+  "learning_rate": LEARNING_RATE,
+  "epochs": N_EPOCHS,
+  "batch_size": BATCH_SIZE,
+  "TopK":TOP_K
+}
 
-    local_rank = rank - gpus_per_node * (rank // gpus_per_node)
-    torch.cuda.set_device(local_rank)
-    print(f"host: {gethostname()}, rank: {rank}, local_rank: {local_rank}")
+print("WandB Project Initialized")
+wandb.init(config=config_dict, project="DLS", entity="dls-glc")
 
-    # train_sampler = torch.utils.data.distributed.DistributedSampler(dataset1, num_replicas=world_size, rank=rank)
-    # train_loader = torch.utils.data.DataLoader(dataset1, batch_size=args.batch_size, sampler=train_sampler, \
-    #                                            num_workers=int(os.environ["SLURM_CPUS_PER_TASK"]), pin_memory=True)
-    # test_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
-    
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size,num_workers=int(os.environ["SLURM_CPUS_PER_TASK"]), pin_memory=True,shuffle = True,drop_last=True)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size,num_workers=int(os.environ["SLURM_CPUS_PER_TASK"]), pin_memory=True,shuffle = False,drop_last=True)
-    
-    global dataloaders
-    dataloaders = {"train": train_loader, "eval":val_loader}
+train_size = int(0.8 * len(dataset))
+val_size = len(dataset) - train_size
 
-    model = ResNet18()
-    model.fc = nn.Sequential(
-                nn.Linear(2048, 5000),
-                nn.ReLU(inplace=True),
-                nn.Linear(5000, N_CLASSES))
+train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE,num_workers =int(os.environ["SLURM_CPUS_PER_TASK"]),shuffle = False,drop_last=True)
+val_loader = DataLoader(val_dataset, batch_size=int(BATCH_SIZE/4), num_workers=0,shuffle = False,drop_last=True)
+dataloaders = {"train": train_loader, "eval":val_loader}
+rgb_batch, target = iter(train_loader).next()
 
-    model = model.to(local_rank)
-    model = model.float()
 
-    ddp_model = DDP(model, device_ids=[local_rank])
-    optimizer = optim.Adadelta(ddp_model.parameters(), lr=args.lr)
-    criterion = nn.CrossEntropyLoss()
+model = models.resnet18(pretrained=False)
+model.fc = nn.Sequential(
+               nn.Linear(512, 1024),
+               nn.ReLU(inplace=True),
+               nn.Linear(1024, N_CLASSES))
 
-    for epoch in range(1, args.epochs + 1):
-        pbar = tqdm(range(N_EPOCHS))
-        model_trained = train_model(ddp_model, local_rank, criterion, optimizer, num_epochs=args.epochs)
-        if rank == 0: test(ddp_model, local_rank, test_loader,criterion)
-        scheduler.step()
+model.to(device)
+model = model.float()
 
-    dist.destroy_process_group()
+criterion = nn.CrossEntropyLoss()
 
+# optimizer = torch.optim.SGD(model.parameters(), lr=0.005, momentum=0.9, weight_decay=0.9)
+optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, amsgrad=True)
+
+
+pbar = tqdm(range(N_EPOCHS))
+model_trained = train_model(model, criterion, optimizer,None, num_epochs=N_EPOCHS, top_k=TOP_K)

@@ -386,15 +386,15 @@ def train_model(model, criterion, optimizer,scheduler ,num_epochs=3, top_k=30):
             # print('{} loss: {:.4f}, acc: {:.4f}'.format(phase,
             #                                             epoch_loss,
             #                                             epoch_acc))
-            pbar.set_postfix({'Phase': phase, 'Loss': epoch_loss, 'Acc': epoch_acc.item(), 'Topk_Err': epoch_topk})
+            pbar.set_postfix({'Phase': phase, 'Loss': epoch_loss/4, 'Acc': epoch_acc.item()/4, 'Topk_Err': epoch_topk/4})
             if phase == "train":
                 train_loss = epoch_loss
                 train_acc = epoch_acc.item()
                 train_topk = epoch_topk
         
         wandb.log({
-            "Epoch": epoch, "Train_Loss": train_loss, "Train_Acc": train_acc, "Train_TopK": train_topk,
-            "Val_Loss": epoch_loss, "Val_Acc": epoch_acc, "Val_TopK": epoch_topk
+            "Epoch": epoch, "Train_Loss": train_loss/4, "Train_Acc": train_acc/4, "Train_TopK": train_topk/4,
+            "Val_Loss": epoch_loss/4, "Val_Acc": epoch_acc/4, "Val_TopK": epoch_topk/4
             })
         scheduler.step()
     return model
@@ -434,7 +434,7 @@ val_size = len(dataset) - train_size
 
 train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE,num_workers =int(os.environ["SLURM_CPUS_PER_TASK"]),shuffle = False,drop_last=True)
-val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers=0,shuffle = False,drop_last=True)
+val_loader = DataLoader(val_dataset, batch_size=int(BATCH_SIZE/4), num_workers=0,shuffle = False,drop_last=True)
 dataloaders = {"train": train_loader, "eval":val_loader}
 rgb_batch, target = iter(train_loader).next()
 
@@ -444,9 +444,9 @@ rgb_batch, target = iter(train_loader).next()
 
 model = models.resnet18(pretrained=False)
 model.fc = nn.Sequential(
-               nn.Linear(512, 3000),
+               nn.Linear(512, 1024),
                nn.ReLU(inplace=True),
-               nn.Linear(3000, N_CLASSES))
+               nn.Linear(1024, N_CLASSES))
 
 model.to(device)
 model = model.float()
@@ -455,7 +455,7 @@ criterion = nn.CrossEntropyLoss()
 
 # optimizer = torch.optim.SGD(model.parameters(), lr=0.005, momentum=0.9, weight_decay=0.9)
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, amsgrad=True)
-scheduler = StepLR(optimizer, step_size=2, gamma=0.1)
+scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
 
 pbar = tqdm(range(N_EPOCHS))
 model_trained = train_model(model, criterion, optimizer,scheduler, num_epochs=N_EPOCHS, top_k=TOP_K)
